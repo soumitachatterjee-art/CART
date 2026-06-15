@@ -28,12 +28,14 @@ EXCHANGE_CONFIG = {
     "log_table": "file_load_log_itau",
 }
 
-# exchanges/itau.py
 
 def step_transform(file_path, config):
     try:
         # Load CSV
         df = pd.read_csv(file_path)
+        logging.info(f"Raw row count: {len(df)}")
+        logging.info(f"Raw Quantity sum: {df['Qty'].sum()}")
+        logging.info(f"Raw Quantity abs sum: {df['Qty'].abs().sum()}")
         if df.empty: return None
 
         # 1. Clean headers to remove trailing spaces
@@ -60,7 +62,7 @@ def step_transform(file_path, config):
         if 'Commodity' in df.columns:
             df['Commodity'] = df['Commodity'].astype(str).str.upper().str.strip()
             
-        valid_commodities = ['DI1', 'DII', 'WDO', 'WSP', 'DOL', 'ISP']
+        valid_commodities = ['DI1', 'WDO', 'WSP', 'DOL', 'ISP']
         df = df[df['Commodity'].isin(valid_commodities)].copy()
 
         if df.empty: return None
@@ -73,9 +75,12 @@ def step_transform(file_path, config):
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
         # 5. Calculation Logic (Summing file totals)
-        total_broker_comm = df['Raw_Comm'].sum()
+        # After ensuring numeric types, ADD THIS:
+        df['Raw_Comm_Total'] = 0.05 * (df['Quantity'].abs())  # rate × contracts
+
+        total_broker_comm   = df['Raw_Comm_Total'].sum()
         total_exchange_fees = df['Raw_Exch'].sum() + df['Raw_Reg'].sum()
-        total_file_qty = df['Quantity'].sum()
+        total_file_qty = df['Quantity'].abs().sum()
 
         if total_file_qty == 0: return None
 
@@ -86,8 +91,7 @@ def step_transform(file_path, config):
 
         # 7. Map to Database CtrCodes
         commodity_to_ctr = {
-            'DI1': 'FUT-7N-IO',
-            'DII': 'FUT-7N-IO', # Both map to same DB code
+            'DI1': 'FUT-7N-IO', # Both map to same DB code
             'WDO': 'FUT-7N-AA',
             'WSP': 'FUT-7N-WS',
             'DOL': 'FUT-7N-CU',
@@ -100,7 +104,7 @@ def step_transform(file_path, config):
         df_grouped['BrokerComm'] = round((df_grouped['Quantity'] / total_file_qty) * total_broker_comm, 2)
 
         # Final selection for step_load
-        return df_grouped[['Trade_date', 'AccountCode', 'AccountAlias', 'CtrCode', 'Quantity', 'ExFee', 'BrokerComm']]
+        return df_grouped.rename(columns={'Quantity': 'Qty'})[['Trade_date', 'AccountCode', 'AccountAlias', 'CtrCode', 'Qty', 'ExFee', 'BrokerComm']]
 
     except Exception as e:
         logging.error(f"Error in Itau transform: {e}")
@@ -110,15 +114,15 @@ def step_load(df, filename, config):
     if df is None or df.empty: return False
 
     insert_query = f"""
-        INSERT INTO {config['target_table']} 
-            (Trade_date, ClientID, AccountAlias, CtrCode, Quantity, ExFee, BrokerComm)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE
-            Quantity   = VALUES(Quantity),
-            ExFee      = VALUES(ExFee),
-            BrokerComm = VALUES(BrokerComm),
-            ExFeeUSD   = NULL,
-            BrokerCommUSD = NULL
+    INSERT INTO {config['target_table']} 
+        (Trade_date, ClientID, AccountAlias, CtrCode, Qty, ExFee, BrokerComm)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    ON DUPLICATE KEY UPDATE
+        Qty        = VALUES(Qty),
+        ExFee      = VALUES(ExFee),
+        BrokerComm = VALUES(BrokerComm),
+        ExFeeUSD   = NULL,
+        BrokerCommUSD = NULL
     """
 
     data_to_insert = [tuple(row) for row in df.values]

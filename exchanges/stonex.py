@@ -143,7 +143,7 @@ def step_transform(file_path, config):
     for col in ["Commission", "Exchange Fee", "Clearing Fee", "NFA Fee"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    df["Net Quantity"] = pd.to_numeric(df["Net Quantity"], errors="coerce").fillna(0)
+    df["Net Quantity"] = pd.to_numeric(df["Net Quantity"], errors="coerce").fillna(0).abs()
 
     df["_exch_key"] = df["Exchange Code"].astype(str).str.strip().str.lower()
     df["_inst_key"]  = df["Instrument Code"].astype(str).str.strip().str.lower()
@@ -159,7 +159,7 @@ def step_transform(file_path, config):
             if key not in already_warned:
                 already_warned.add(key)
                 msg = (
-                    f"\n⚠️  UNMAPPED CODE FOUND — please add to ctrcode_mapping in exchanges/stonex.py:\n"
+                    f"\n⚠️ UNMAPPED CODE FOUND — please add to ctrcode_mapping in exchanges/stonex.py:\n"
                     f"    Exchange Code  : '{row['Exchange Code']}'\n"
                     f"    Instrument Code: '{row['Instrument Code']}'\n"
                     f"    Add this line  : "

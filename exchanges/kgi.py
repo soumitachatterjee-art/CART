@@ -73,7 +73,7 @@ def step_transform(file_path, config):
         # 7. Final selection for step_load (Match DB column order)
         df_final = pd.DataFrame({
             'Trade_Date': df_grouped['TRADE DATE'],
-            'Account': df_grouped['CLIENT CODE'],
+            'ClientID': df_grouped['CLIENT CODE'],
             'CtrCode': df_grouped['CtrCode'],
             'CommCur': df_grouped['COMM CCY'],
             'CommFee': df_grouped['COMMISSION'],
@@ -93,7 +93,7 @@ def step_load(df, filename, config):
 
     insert_query = f"""
         INSERT INTO {config['target_table']} 
-            (Trade_Date, Account, CtrCode, CommCur, CommFee, Qty)
+            (Trade_Date, ClientID, CtrCode, CommCur, CommFee, Qty)
         VALUES (%s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             CommCur = VALUES(CommCur),

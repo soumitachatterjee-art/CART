@@ -52,6 +52,7 @@ def step_transform(file_path, config):
 
     try:
         df = pd.read_csv(file_path, usecols=required_columns)
+        df = df.rename(columns={"Account": "ClientID"})
     except Exception as e:
         logging.error(f"  Could not read {file_path}: {e}")
         return None
@@ -66,7 +67,7 @@ def step_transform(file_path, config):
 
     df = df[
         (df["TransactionType"].isin(valid_types)) &
-        (~df["Account"].isin(excluded))
+        (~df["ClientID"].isin(excluded))
     ].copy()
 
     if df.empty:
@@ -87,7 +88,7 @@ def step_transform(file_path, config):
 
     # --- Grouping ---
     group_cols = [
-        "TradeDate", "CtrCode", "Account", "Commission_CCY",
+        "TradeDate", "CtrCode", "ClientID", "Commission_CCY",
         "Clearing_Fee_CCY", "Exchange_Fee_CCY", "NFA_Fee_CCY",
     ]
     agg_dict = {
@@ -117,7 +118,7 @@ def step_transform(file_path, config):
     df_final = pd.DataFrame({
         "Trade_date": df["TradeDate"],
         "CtrCode":    df["CtrCode"],
-        "Account":    df["Account"],
+        "ClientID":   df["ClientID"],
         "mktCur":     df["mktCur"],
         "ExFee":      df["ExFee"],
         "CommCur":    df["Commission_CCY"],
@@ -127,7 +128,7 @@ def step_transform(file_path, config):
         "Qty":        df["Lots"],
     })
 
-    df_final = df_final.sort_values(["Trade_date", "CtrCode", "Account"])
+    df_final = df_final.sort_values(["Trade_date", "CtrCode", "ClientID"])
     logging.info(f"  Transform complete: {len(df_final)} records ready")
     return df_final
 
@@ -147,7 +148,7 @@ def step_load(df, filename, config):
 
     insert_query = f"""
         INSERT INTO {config['target_table']}
-            (Trade_date, CtrCode, Account, mktCur, ExFee,
+            (Trade_date, CtrCode, ClientID, mktCur, ExFee,
              CommCur, CommFee, NfafeeCur, NfaFee, Qty,
              ExFeeUSD, CommFeeUSD, NfaFeeUSD, TotalUSD)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
